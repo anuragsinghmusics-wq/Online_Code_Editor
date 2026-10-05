@@ -1,0 +1,65 @@
+{
+  "system_architecture": {
+    "description": "An interactive, multi-file online code editor with real-time terminal input/output and browser preview capabilities.",
+    "components": {
+      "frontend": {
+        "framework": "React (Vite)",
+        "code_editor": "@monaco-editor/react (Monaco Editor)",
+        "terminal_ui": "xterm.js (handles interactive command output and key inputs)",
+        "panels": "Custom React-based ResizablePanels layout engine",
+        "browser_preview": "Iframe with inlined source injection for previewing HTML/CSS/JS files"
+      },
+      "backend": {
+        "runtime": "Node.js (Express server)",
+        "communication": "Socket.io (WebSockets for real-time bi-directional streaming)",
+        "sandbox_controller": "Executes local filesystem temp generation, transfers file arrays, and interacts with Docker"
+      },
+      "sandbox": {
+        "engine": "Piston (Isolated secure execution engine)",
+        "virtualization": "Docker Container running 'ghcr.io/engineer-man/piston' on a local engine"
+      }
+    }
+  },
+  "execution_flow": [
+    {
+      "step": 1,
+      "name": "User Clicks Run",
+      "description": "The user edits code inside the Monaco Editor interface and hits 'Run'. The frontend aggregates all virtual files in memory for the active language."
+    },
+    {
+      "step": 2,
+      "name": "WebSocket Dispatch",
+      "description": "The client sends a socket event 'run' containing: { language: 'javascript', files: [{ name: 'index.js', content: '...' }, { name: 'src/utils.js', content: '...' }] }."
+    },
+    {
+      "step": 3,
+      "name": "Backend Directory Creation",
+      "description": "The Node.js server generates a unique UUID-based folder locally on the host filesystem under a temporary workspace. It writes all nested files recursively to this path."
+    },
+    {
+      "step": 4,
+      "name": "Docker File Synchronization",
+      "description": "The backend server uses a child process command: 'docker cp [local_temp_folder]/. piston_api:[sandbox_path]' to load all multi-file directories inside the running Piston container."
+    },
+    {
+      "step": 5,
+      "name": "Sandbox Compilation & Execution",
+      "description": "If a compiler is required (e.g. C++), the backend runs Piston's build script inside the Docker context via: 'docker exec piston_api sh -c ... bash compile mainFilename'. If interpreted, it immediately launches the process."
+    },
+    {
+      "step": 6,
+      "name": "Interactive Terminal Linkage",
+      "description": "The standard output (stdout) and error stream (stderr) are routed from the Docker execution process, parsed, and pushed back over the WebSocket channel to the browser console. Any key presses captured on the client side (xterm.js) are sent back to the backend process stdin via: 'socket.emit(\"input\", ...)'."
+    },
+    {
+      "step": 7,
+      "name": "Process Cleanup",
+      "description": "Upon execution completion or termination (via 'stop' event), the backend destroys the running docker execution process, wipes the temporary folders on the host, and sends an 'exit' signal to the client to release UI locks."
+    }
+  ],
+  "piston_container_configuration": {
+    "base_image": "ghcr.io/engineer-man/piston:latest",
+    "working_directory_in_container": "/piston/jobs",
+    "how_piston_runs_code": "Piston maps languages to specific package profiles. Each profile contains scripts to compile and run files (e.g., node, python3, g++) inside a locked-down execution user profile to prevent privilege escalation."
+  }
+}
